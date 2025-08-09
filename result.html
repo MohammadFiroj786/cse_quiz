@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz Results</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h2>Your Quiz Results</h2>
+  <div id="results"></div>
+
+  <script>
+    const resultsData = JSON.parse(localStorage.getItem("quizResults"));
+
+    if (!resultsData) {
+      document.getElementById("results").innerHTML = "<p>No results found.</p>";
+    } else {
+      let html = `<h3>Score: ${resultsData.score} / ${resultsData.total}</h3><hr>`;
+
+      resultsData.questions.forEach((q, index) => {
+        html += `
+          <div>
+            <p><strong>Q${index + 1}: ${q.question}</strong></p>
+            <p>Your answer: ${q.userAnswer || "No answer"}</p>
+            <p>Correct answer: ${q.answer}</p>
+            <p><b>Explanation:</b> ${q.explanation || "No explanation provided."}</p>
+            <hr>
+          </div>
+        `;
+      });
+
+      document.getElementById("results").innerHTML = html;
+    }
+  </script>
+</body>
+</html>
