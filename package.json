@@ -5,7 +5,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
-    "openai": "^4.98.0",
-    "start" : "node server.js"
+    "openai": "^4.98.0"
+  },
+  "scripts": {
+    "start": "node server.js"
   }
 }
