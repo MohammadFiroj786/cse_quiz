@@ -5,7 +5,8 @@ require("dotenv").config();
 const axios = require("axios");
 
 const app = express();
-const port = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
+const HOST = "0.0.0.0"; // Important for Render
 
 // Middleware
 app.use(cors());
@@ -54,7 +55,7 @@ Return ONLY valid JSON in this format:
             questions = JSON.parse(content);
             if (!Array.isArray(questions)) throw new Error("Response is not an array");
         } catch (err) {
-            console.error("Parsing error:", err.message);
+            console.error("Parsing error:", err.message, "Content:", content);
             return res.status(500).json({ error: "Invalid Perplexity response format" });
         }
 
@@ -84,6 +85,10 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(port, () => {
-    console.log(`✅ Server running at http://localhost:${port}`);
+const server = app.listen(PORT, HOST, () => {
+    console.log(`✅ Server running at http://${HOST}:${PORT}`);
 });
+
+// Increase server timeouts to prevent connection resets
+server.keepAliveTimeout = 120000;   // 120 seconds
+server.headersTimeout = 120000;     // 120 seconds
