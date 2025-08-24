@@ -2,18 +2,18 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const path = require("path");
 
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 5000; // ✅ Online (Render) uses PORT, offline defaults to 5000
 
-// ✅ Load API key from .env file (DO NOT hardcode it)
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
-const PPLX_API_URL = "https://api.perplexity.ai/chat/completions";
+// ✅ Serve static files (frontend HTML, CSS, JS)
+app.use(express.static(path.join(__dirname, "public")));
 
-app.use(express.static("public"));
 app.use(cors());
 app.use(express.json());
 
+// ------------------- API Route -------------------
 app.post("/generate-quiz", async (req, res) => {
     const { subject, examType } = req.body;
 
@@ -29,7 +29,7 @@ Return ONLY valid JSON in this format:
 
     try {
         const pplxResponse = await axios.post(
-            PPLX_API_URL,
+            "https://api.perplexity.ai/chat/completions",
             {
                 model: "sonar-pro",
                 messages: [
@@ -40,7 +40,7 @@ Return ONLY valid JSON in this format:
             },
             {
                 headers: {
-                    Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+                    Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`, // ✅ API key from .env (offline) or Render (online)
                     "Content-Type": "application/json"
                 }
             }
@@ -67,6 +67,12 @@ Return ONLY valid JSON in this format:
     }
 });
 
+// ✅ Catch-all route for React/SPA (Express 5+ safe)
+app.get("/:path(*)", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+    // ------------------- Start Server -------------------
 app.listen(port, () => {
     console.log(`✅ Server running at http://localhost:${port}`);
 });
