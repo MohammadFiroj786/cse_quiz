@@ -5,10 +5,10 @@ const axios = require("axios");
 const path = require("path");
 
 const app = express();
-const port = process.env.PORT || 5000; // ✅ Render gives PORT automatically
+const port = process.env.PORT || 5000; // Render provides PORT
 
-// ✅ Serve static files (frontend build)
-app.use(express.static(path.join(__dirname, "public")));
+// Serve static frontend files (React build folder)
+app.use(express.static(path.join(__dirname, "build")));
 
 app.use(cors());
 app.use(express.json());
@@ -51,9 +51,7 @@ Return ONLY valid JSON in this format:
         let questions;
         try {
             questions = JSON.parse(content);
-            if (!Array.isArray(questions)) {
-                throw new Error("Response is not a JSON array");
-            }
+            if (!Array.isArray(questions)) throw new Error("Response is not an array");
         } catch (err) {
             console.error("Parsing error:", err.message);
             return res.status(500).json({ error: "Invalid Perplexity response format" });
@@ -67,9 +65,9 @@ Return ONLY valid JSON in this format:
     }
 });
 
-// ✅ Catch-all route for React/SPA
+// Catch-all route for SPA frontend
 app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+    res.sendFile(path.join(__dirname, "build", "index.html"));
 });
 
 // ------------------- Start Server -------------------
