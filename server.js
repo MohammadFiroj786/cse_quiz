@@ -5,9 +5,9 @@ const axios = require("axios");
 const path = require("path");
 
 const app = express();
-const port = process.env.PORT || 5000; // ✅ Online (Render) uses PORT, offline defaults to 5000
+const port = process.env.PORT || 5000; // ✅ Render gives PORT automatically
 
-// ✅ Serve static files (frontend HTML, CSS, JS)
+// ✅ Serve static files (frontend build)
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use(cors());
@@ -40,7 +40,7 @@ Return ONLY valid JSON in this format:
             },
             {
                 headers: {
-                    Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`, // ✅ API key from .env (offline) or Render (online)
+                    Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
                     "Content-Type": "application/json"
                 }
             }
@@ -67,12 +67,12 @@ Return ONLY valid JSON in this format:
     }
 });
 
-// ✅ Catch-all route for React/SPA (Express 5+ safe)
-app.get("/:path(*)", (req, res) => {
+// ✅ Catch-all route for React/SPA
+app.get("*", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-    // ------------------- Start Server -------------------
+// ------------------- Start Server -------------------
 app.listen(port, () => {
     console.log(`✅ Server running at http://localhost:${port}`);
 });
