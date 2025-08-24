@@ -7,11 +7,10 @@ const path = require("path");
 const app = express();
 const port = process.env.PORT || 5000; // Render provides PORT
 
-// Serve static frontend files (React build folder)
-app.use(express.static(path.join(__dirname, "build")));
-
+// ------------------- Middleware -------------------
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "build"))); // Serve React frontend
 
 // ------------------- API Route -------------------
 app.post("/generate-quiz", async (req, res) => {
@@ -65,9 +64,15 @@ Return ONLY valid JSON in this format:
     }
 });
 
-// Catch-all route for SPA frontend
-app.get("*", (req, res) => {
+// ------------------- Catch-all route for SPA -------------------
+app.get("/*", (req, res) => {
     res.sendFile(path.join(__dirname, "build", "index.html"));
+});
+
+// ------------------- Global Error Handler -------------------
+app.use((err, req, res, next) => {
+    console.error("Unexpected server error:", err);
+    res.status(500).send("Internal Server Error");
 });
 
 // ------------------- Start Server -------------------
