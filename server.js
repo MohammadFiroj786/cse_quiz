@@ -1,18 +1,20 @@
-require("dotenv").config();
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
+require("dotenv").config();
 const axios = require("axios");
-const path = require("path");
 
 const app = express();
-const port = process.env.PORT || 5000; // Render provides PORT
+const port = process.env.PORT || 5000;
 
-// ------------------- Middleware -------------------
+// Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "build"))); // Serve React frontend
 
-// ------------------- API Route -------------------
+// Serve static files from 'public' folder
+app.use(express.static(path.join(__dirname, "public")));
+
+// API Route
 app.post("/generate-quiz", async (req, res) => {
     const { subject, examType } = req.body;
 
@@ -64,18 +66,24 @@ Return ONLY valid JSON in this format:
     }
 });
 
-// ------------------- Catch-all route for SPA -------------------
-app.get("/*", (req, res) => {
-    res.sendFile(path.join(__dirname, "build", "index.html"));
+// Serve index.html at root
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ------------------- Global Error Handler -------------------
+// Serve other HTML files if accessed directly
+app.get("/:page", (req, res) => {
+    const page = req.params.page;
+    res.sendFile(path.join(__dirname, "public", `${page}.html`));
+});
+
+// Global error handler
 app.use((err, req, res, next) => {
     console.error("Unexpected server error:", err);
     res.status(500).send("Internal Server Error");
 });
 
-// ------------------- Start Server -------------------
+// Start server
 app.listen(port, () => {
     console.log(`✅ Server running at http://localhost:${port}`);
 });
