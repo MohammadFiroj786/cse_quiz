@@ -88,7 +88,3 @@ app.use((err, req, res, next) => {
 const server = app.listen(PORT, HOST, () => {
     console.log(`✅ Server running at http://${HOST}:${PORT}`);
 });
-
-// Increase server timeouts to prevent connection resets
-server.keepAliveTimeout = 120000;   // 120 seconds
-server.headersTimeout = 120000;     // 120 seconds
