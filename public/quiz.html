@@ -1,117 +1,271 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CS Quiz Arena - Quiz</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GATEPrep AI - Quiz</title>
+
+<!-- Bootstrap & Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+* { font-family: 'Poppins', sans-serif; }
+body { background: linear-gradient(135deg, #e3f2fd, #f9f9f9); min-height: 100vh; }
+
+.card { border-radius: 20px; border: none; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08); overflow: hidden; animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+h3#quiz-title { font-weight: 700; background: linear-gradient(90deg, #007bff, #00b4d8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+.timer-container { display: flex; flex-direction: column; align-items: flex-end; }
+#timer { font-weight: 700; font-size: 1.1rem; color: #ff3d00; }
+.progress { width: 130px; height: 8px; border-radius: 10px; overflow: hidden; }
+.progress-bar { transition: width 0.4s linear; }
+
+.question-block { background: #fff; border-radius: 16px; padding: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); transition: all 0.3s ease; animation: fadeSlide 0.4s ease-in-out; }
+@keyframes fadeSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.question-block p { font-weight: 600; font-size: 1.1rem; }
+
+.option-btn { display: block; width: 100%; text-align: left; border: 2px solid #e0e0e0; border-radius: 12px; padding: 10px 15px; margin-bottom: 12px; background-color: #fff; font-weight: 500; transition: all 0.25s ease; cursor: pointer; }
+.option-btn:hover { background: #f1f9ff; border-color: #007bff; transform: translateY(-2px); }
+.option-btn.selected { background: linear-gradient(135deg, #007bff, #00b4d8); color: #fff; border-color: #007bff; transform: scale(1.02); }
+.option-btn.correct { background: #28a745 !important; color: #fff; }
+.option-btn.wrong { background: #dc3545 !important; color: #fff; }
+
+.btn-primary { border-radius: 50px; padding: 12px 25px; font-weight: 600; background: linear-gradient(135deg, #007bff, #00b4d8); border: none; transition: all 0.3s ease; }
+.btn-primary:hover { transform: scale(1.05); background: linear-gradient(135deg, #0069d9, #0096c7); }
+
+#result h4 { font-weight: 700; color: #28a745; }
+footer { background: #111; color: white; text-align: center; padding: 12px; margin-top: 40px; }
+
+.warning-box { position: fixed; top: 10px; right: 10px; z-index: 9999; background: #ffc107; color: #000; padding: 10px 20px; border-radius: 10px; font-weight: 600; display: none; }
+</style>
 </head>
 <body>
-  <div id="navbar-placeholder"></div>
-  <div class="container">
-    <h2 id="quiz-title">Loading Your Quiz...</h2>
-    <div id="quiz-box"></div>
-    <button id="submit-btn" class="btn" style="display:none;">Submit Quiz</button>
+
+<!-- Navbar -->
+<div id="navbar-placeholder"></div>
+
+<!-- Quiz Section -->
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h3 class="fw-bold text-primary" id="quiz-title">Loading Quiz...</h3>
+          <div class="timer-container">
+            <span id="timer">--</span>
+            <div class="progress">
+              <div id="time-progress" class="progress-bar bg-danger" style="width: 100%;"></div>
+            </div>
+          </div>
+        </div>
+        <hr>
+        <div id="quiz-box"></div>
+        <div class="d-grid mt-4">
+          <button id="next-btn" class="btn btn-primary btn-lg" disabled>Next <i class="bi bi-arrow-right-circle ms-1"></i></button>
+        </div>
+        <div id="result" class="text-center mt-4" style="display:none;">
+          <i class="bi bi-trophy-fill text-warning fs-1 mb-3"></i>
+          <h4></h4>
+          <p class="text-muted mb-0">Excellent work! You’re improving every quiz 🚀</p>
+        </div>
+        <div id="loading" class="text-center mt-4">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="fw-semibold mt-2">Fetching questions, please wait...</p>
+        </div>
+      </div>
+    </div>
   </div>
+</div>
 
-  <script>
-    const quizBox = document.getElementById("quiz-box");
-    const submitBtn = document.getElementById("submit-btn");
-    const quizTitle = document.getElementById("quiz-title");
-    let questions = [];
-    
-    const queryParams = new URLSearchParams(window.location.search);
-    const subject = queryParams.get("subject") || "cs";
-    const examType = queryParams.get("type") || "gate";
+<!-- Warning -->
+<div id="warningBox" class="warning-box">⚠️ Warning: Don’t leave the quiz tab!</div>
 
-    // ✅ Detect environment (local vs deployed)
-    const API_BASE =
-      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-        ? "http://127.0.0.1:5000"
-        : "https://online-gate-exam.onrender.com";
+<footer>© 2025 GATEPrep AI | Designed by Firoj ❤️</footer>
 
-    console.log("Subject:", subject);
-    console.log("Exam Type:", examType);
-    console.log("API_BASE:", API_BASE);
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-    // Function to fetch questions from the backend
-    async function fetchQuestionsFromChatGPT() {
-      quizTitle.innerText = "Generating Questions...";
+<script>
+/* Load Navbar */
+fetch('navbar.html')
+  .then(res => res.text())
+  .then(html => document.getElementById('navbar-placeholder').innerHTML = html)
+  .catch(() => console.warn("Navbar load failed"));
 
-      try {
-        const response = await fetch(`${API_BASE}/generate-quiz`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ subject, examType })
-        });
+// Quiz variables
+const query = new URLSearchParams(window.location.search);
+const subject = query.get('subject') || "Data Structures";
+const difficulty = query.get('difficulty') || "easy";
+const numQuestions = parseInt(query.get('limit')) || 10;
 
-        const data = await response.json();
-        console.log('Received questions:', data);
-        questions = data;
-        renderQuestions();
-      } catch (err) {
-        quizTitle.innerText = "Error loading quiz.";
-        quizBox.innerHTML = `<p style='color:red;'>${err.message}</p>`;
-        console.error('Error fetching quiz:', err);
-      }
-    }
+const quizBox = document.getElementById('quiz-box');
+const quizTitle = document.getElementById('quiz-title');
+const nextBtn = document.getElementById('next-btn');
+const timerEl = document.getElementById('timer');
+const progressBar = document.getElementById('time-progress');
+const resultDiv = document.getElementById('result');
+const loading = document.getElementById('loading');
+const warningBox = document.getElementById('warningBox');
 
-    // Function to render questions on the page
-    function renderQuestions() {
-      quizTitle.innerText = "Answer the Questions";
-      quizBox.innerHTML = "";
+let questions = [], currentQ = 0, score = 0, timer, timeLeft = 0;
+let warningCount = 0;
+let quizEnded = false; // ✅ stop warnings after quiz ends
+const timeMap = { easy: 20, medium: 30, hard: 40 };
 
-      if (questions.length === 0) {
-        quizBox.innerHTML = "<p>No questions received from the backend.</p>";
-        return;
-      }
+// Fetch questions dynamically
+async function fetchQuestions() {
+  quizBox.style.display = 'none';
+  nextBtn.style.display = 'none';
+  loading.style.display = 'block';
 
-      questions.forEach((q, idx) => {
-        const qDiv = document.createElement("div");
-        qDiv.classList.add("question-block");
-        qDiv.innerHTML = `
-          <p><strong>Q${idx + 1}. ${q.question}</strong></p>
-          ${q.options.map(opt => `
-            <label>
-              <input type="radio" name="q${idx}" value="${opt}" /> ${opt}
-            </label><br>
-          `).join("")}
-        `;
-        quizBox.appendChild(qDiv);
-      });
-
-      submitBtn.style.display = "block";
-    }
-
-    // Submit event for calculating the score
-    submitBtn.addEventListener("click", () => {
-      let score = 0;
-
-      questions.forEach((q, idx) => {
-        const selected = document.querySelector(`input[name='q${idx}']:checked`);
-        if (selected && selected.value === q.answer) {
-          score++;
-        }
-      });
-
-      alert(`🎉 You scored ${score} out of ${questions.length}`);
+  try {
+    const res = await fetch("http://localhost:5000/generate-quiz", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject, difficulty, limit: numQuestions })
     });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) throw new Error("No questions received");
 
-    // Navbar
-    function toggleMenu() {
-      const nav = document.getElementById('navbar');
-      nav.classList.toggle('active');
+    questions = data;
+    loading.style.display = 'none';
+    quizBox.style.display = 'block';
+    nextBtn.style.display = 'block';
+    quizTitle.textContent = `${subject} (${difficulty}) Quiz`;
+    renderQuestion();
+  } catch (err) {
+    loading.style.display = 'none';
+    quizBox.innerHTML = `<p class="text-danger fw-semibold text-center">⚠ Unable to load quiz.<br>Check server connection.</p>`;
+  }
+}
+
+// Render one question
+function renderQuestion() {
+  if (currentQ >= questions.length) return showResult();
+  const q = questions[currentQ];
+  quizBox.innerHTML = `
+    <div class="question-block">
+      <p>Q${currentQ + 1}. ${q.question}</p>
+      ${q.options.map((opt, i) => `
+        <button class="option-btn" data-value="${opt}" id="opt-${i}">${opt}</button>
+      `).join('')}
+    </div>
+  `;
+  nextBtn.disabled = true;
+  startTimer(timeMap[difficulty]);
+  document.querySelectorAll(".option-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      document.querySelectorAll(".option-btn").forEach(b => b.classList.remove("selected"));
+      e.target.classList.add("selected");
+      nextBtn.disabled = false;
+    });
+  });
+}
+
+// Timer
+function startTimer(seconds) {
+  clearInterval(timer);
+  timeLeft = seconds;
+  progressBar.style.width = "100%";
+  timerEl.textContent = `${timeLeft}s`;
+  timer = setInterval(() => {
+    timeLeft--;
+    timerEl.textContent = `${timeLeft}s`;
+    progressBar.style.width = `${(timeLeft / seconds) * 100}%`;
+    if (timeLeft <= 0) {
+      clearInterval(timer);
+      nextQuestion();
     }
-    fetch("navbar.html")
-      .then(response => response.text())
-      .then(data => {
-        document.getElementById("navbar-placeholder").innerHTML = data;
-      });
+  }, 1000);
+}
 
-    // Fetch the quiz questions
-    fetchQuestionsFromChatGPT();
-  </script>
+// Next question
+function nextQuestion() {
+  const selected = document.querySelector(".option-btn.selected");
+  if (selected && selected.dataset.value === questions[currentQ].answer) {
+    score++;
+    selected.classList.add("correct");
+  } else if (selected) {
+    selected.classList.add("wrong");
+  }
+  setTimeout(() => {
+    currentQ++;
+    renderQuestion();
+  }, 600);
+}
+
+nextBtn.addEventListener('click', () => { clearInterval(timer); nextQuestion(); });
+
+// Show result
+function showResult() {
+  quizEnded = true;
+  clearInterval(timer);
+  quizBox.style.display = 'none';
+  nextBtn.style.display = 'none';
+  document.querySelector('.timer-container').style.display = 'none';
+  resultDiv.style.display = 'block';
+  resultDiv.querySelector('h4').innerText = `🎯 You scored ${score} / ${questions.length}`;
+
+  // 🟢 Save Result to MongoDB
+  try {
+    const user = JSON.parse(localStorage.getItem('user')) || {};
+    fetch("http://localhost:5000/api/saveResult", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: user.name || "Anonymous",
+        subject,
+        score,
+        totalQuestions: questions.length
+      })
+    }).then(res => res.json())
+      .then(data => console.log("✅ Result stored:", data))
+      .catch(err => console.error("❌ Error storing result:", err));
+  } catch (err) {
+    console.error("❌ Result save failed:", err);
+  }
+}
+
+
+// Anti-tab switching warnings
+function showWarning() {
+  if (quizEnded) return; // ✅ ignore after quiz ends
+
+  warningCount++;
+  warningBox.style.display = 'block';
+  warningBox.textContent = `⚠️ Warning ${warningCount}/2: Don’t leave the quiz tab!`;
+  setTimeout(() => { warningBox.style.display = 'none'; }, 2500);
+
+  if (warningCount >= 3) {
+    quizEnded = true; // ✅ prevent further warnings
+    clearInterval(timer);
+    showResult(); // ✅ directly end quiz
+    alert("❌ You switched tabs multiple times. Quiz submitted automatically.");
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) showWarning();
+});
+
+fetchQuestions();
+</script>
+
+<script type="module">
+import { auth } from './firebase-config.js';
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.15.0/firebase-auth.js';
+
+// Hide content until login
+document.querySelector('.container').style.display = 'none';
+onAuthStateChanged(auth, (user) => {
+  if (!user) window.location.href = 'login.html';
+  else document.querySelector('.container').style.display = 'block';
+});
+</script>
+
 </body>
 </html>

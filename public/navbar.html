@@ -1,10 +1,83 @@
-<header class="header">
-    <div class="logo">CS Quiz Arena</div>
-    <nav class="navbar" id="navbar">
-      <a href="index.html">Home</a>
-      <a href="#">About</a>
-      <a href="subject.html">Quizzes</a>
-      <a href="#">Login</a>
-    </nav>
-    <div class="menu-icon" onclick="toggleMenu()">☰</div>
-  </header>
+<!-- navbar.html -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+  <div class="container">
+    <a class="navbar-brand fw-bold text-primary" href="index.html">GATEPrep AI</a>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ms-auto align-items-center">
+        <li class="nav-item"><a class="nav-link" href="index.html">Home</a></li>
+        <li class="nav-item"><a class="nav-link" href="subject.html">Subjects</a></li>
+        <li class="nav-item"><a class="nav-link" href="leaderboard.html">Leaderboard</a></li>
+        <li class="nav-item"><a class="btn btn-primary ms-3" href="subject.html">Start Quiz</a></li>
+
+        <!-- User Profile Dropdown -->
+        <li class="nav-item dropdown ms-3" id="userDropdown" style="display:none;">
+          <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="navbarUser" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <div class="rounded-circle overflow-hidden border border-primary" style="width:38px; height:38px;">
+              <img id="userAvatar" src="" alt="User" style="width:100%; height:100%; object-fit:cover;">
+            </div>
+            <span id="userName" class="ms-2 fw-semibold text-dark"></span>
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+            <li><a class="dropdown-item" href="profile.html">Profile</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="#" id="logoutBtn">Logout</a></li>
+          </ul>
+        </li>
+
+        <!-- Login Button -->
+        <li class="nav-item" id="loginBtn">
+          <a class="btn btn-outline-primary ms-3" href="login.html">Login</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<script>
+const userDropdown = document.getElementById("userDropdown");
+const loginBtn = document.getElementById("loginBtn");
+const userAvatar = document.getElementById("userAvatar");
+const userName = document.getElementById("userName");
+const logoutBtn = document.getElementById("logoutBtn");
+
+function showUser(user) {
+  userDropdown.style.display = "block";
+  loginBtn.style.display = "none";
+
+  userName.textContent = user.name ? user.name.split(" ")[0] : "User";
+
+  if (user.photoURL && user.photoURL.trim() !== "") {
+    userAvatar.src = user.photoURL;
+  } else {
+    const letter = user.name ? user.name.charAt(0).toUpperCase() : "U";
+    userAvatar.src = `https://ui-avatars.com/api/?name=${letter}&background=0d6efd&color=fff&size=128&bold=true`;
+  }
+}
+
+function checkLogin() {
+  const userJSON = localStorage.getItem("user");
+  if (userJSON) {
+    const user = JSON.parse(userJSON);
+    showUser(user);
+  } else {
+    userDropdown.style.display = "none";
+    loginBtn.style.display = "block";
+  }
+}
+
+// Logout
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem("user");
+  localStorage.removeItem("token");
+  window.location.href = "login.html";
+});
+
+window.addEventListener("DOMContentLoaded", checkLogin);
+</script>
+</body>
+</html>
