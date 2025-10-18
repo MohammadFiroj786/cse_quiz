@@ -24,14 +24,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// -------------------- MongoDB --------------------
+// -------------------- MONGODB --------------------
+if (!process.env.MONGO_URI) {
+  console.error("❌ MONGO_URI is not set in environment variables!");
+  process.exit(1);
+}
+
 mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Error:", err.message));
+  .catch((err) => {
+    console.error("❌ MongoDB Error:", err.message);
+    process.exit(1); // Stop server if DB fails
+  });
 
 // -------------------- SCHEMAS --------------------
 const userSchema = new mongoose.Schema({
@@ -43,7 +48,7 @@ const userSchema = new mongoose.Schema({
   googleId: String,
 });
 
-const leaderboardSchema = new mongoose.Schema({
+const resultSchema = new mongoose.Schema({
   name: String,
   subject: String,
   score: Number,
@@ -52,34 +57,28 @@ const leaderboardSchema = new mongoose.Schema({
 });
 
 const User = mongoose.models.User || mongoose.model("User", userSchema);
-const Leaderboard = mongoose.models.Leaderboard || mongoose.model("Leaderboard", leaderboardSchema, "leaderboard");
+const Result = mongoose.models.Result || mongoose.model("Result", resultSchema, "leaderboard");
 
 // -------------------- SIGNUP --------------------
 app.post("/api/signup", async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
-
     if (!name || !email || !password || !confirmPassword)
       return res.status(400).json({ error: "All fields are required" });
     if (password !== confirmPassword)
       return res.status(400).json({ error: "Passwords do not match" });
 
     const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ error: "Email already exists" });
+    if (existingUser) return res.status(400).json({ error: "Email already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new User({ name, email, password: hashedPassword });
     await newUser.save();
 
     const token = jwt.sign({ email: newUser.email }, JWT_SECRET, { expiresIn: "2h" });
-    res.json({
-      message: "Signup successful",
-      token,
-      user: { name: newUser.name, email: newUser.email },
-    });
-  } catch (error) {
-    console.error("Signup Error:", error.message);
+    res.json({ message: "Signup successful", token, user: { name, email } });
+  } catch (err) {
+    console.error("Signup Error:", err.message);
     res.status(500).json({ error: "Server error during signup" });
   }
 });
@@ -94,14 +93,10 @@ app.post("/api/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ error: "Invalid password" });
 
-    const token = jwt.sign({ email: user.email }, JWT_SECRET, { expiresIn: "2h" });
-    res.json({
-      message: "Login successful",
-      token,
-      user: { name: user.name, email: user.email, photoURL: user.photoURL || null },
-    });
-  } catch (error) {
-    console.error("Login Error:", error.message);
+    const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "2h" });
+    res.json({ message: "Login successful", token, user: { name: user.name, email: user.email, photoURL: user.photoURL || null } });
+  } catch (err) {
+    console.error("Login Error:", err.message);
     res.status(500).json({ error: "Server error during login" });
   }
 });
@@ -111,13 +106,8 @@ const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 app.post("/api/google-login", async (req, res) => {
   try {
     const { token } = req.body;
-    const ticket = await googleClient.verifyIdToken({
-      idToken: token,
-      audience: GOOGLE_CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-    const { name, email, picture, sub: googleId } = payload;
+    const ticket = await googleClient.verifyIdToken({ idToken: token, audience: GOOGLE_CLIENT_ID });
+    const { name, email, picture, sub: googleId } = ticket.getPayload();
 
     let user = await User.findOne({ email });
     if (!user) {
@@ -129,13 +119,9 @@ app.post("/api/google-login", async (req, res) => {
     }
 
     const jwtToken = jwt.sign({ email }, JWT_SECRET, { expiresIn: "2h" });
-    res.json({
-      message: "Google login successful",
-      token: jwtToken,
-      user: { name: user.name, email: user.email, photoURL: user.photoURL },
-    });
-  } catch (error) {
-    console.error("Google Login Error:", error.message);
+    res.json({ message: "Google login successful", token: jwtToken, user: { name: user.name, email, photoURL: user.photoURL } });
+  } catch (err) {
+    console.error("Google Login Error:", err.message);
     res.status(500).json({ error: "Google login failed" });
   }
 });
@@ -147,34 +133,22 @@ app.post("/generate-quiz", async (req, res) => {
     if (!subject || !difficulty || !limit)
       return res.status(400).json({ error: "Missing required fields" });
 
-    if (!PERPLEXITY_API_KEY) {
-      console.warn("⚠️ Using fallback questions (no API key)");
-      return res.json(generateFallbackQuestions(subject, difficulty, limit));
-    }
+    if (!PERPLEXITY_API_KEY) return res.json(generateFallbackQuestions(subject, difficulty, limit));
 
-    const prompt = `
-Generate ${limit} ${difficulty}-level GATE MCQs on "${subject}".
-Return ONLY JSON array like:
-[{"question": "...", "options": ["A","B","C","D"], "answer": "A"}]
-`;
+    const prompt = `Generate ${limit} ${difficulty}-level GATE MCQs on "${subject}". Return ONLY JSON array.`;
 
     const response = await axios.post(
       "https://api.perplexity.ai/chat/completions",
-      {
-        model: "sonar",
-        messages: [{ role: "user", content: prompt }],
-      },
-      {
-        headers: { Authorization: `Bearer ${PERPLEXITY_API_KEY}`, "Content-Type": "application/json" },
-      }
+      { model: "sonar", messages: [{ role: "user", content: prompt }] },
+      { headers: { Authorization: `Bearer ${PERPLEXITY_API_KEY}`, "Content-Type": "application/json" } }
     );
 
     const text = response.data?.choices?.[0]?.message?.content || "";
     const cleaned = text.replace(/```(?:json)?/gi, "").replace(/`/g, "").trim();
     const questions = JSON.parse(cleaned);
     res.json(questions);
-  } catch (error) {
-    console.error("❌ Quiz Error:", error.message);
+  } catch (err) {
+    console.error("Quiz Error:", err.message);
     res.json(generateFallbackQuestions(req.body.subject, req.body.difficulty, req.body.limit));
   }
 });
@@ -194,11 +168,11 @@ app.post("/api/saveResult", async (req, res) => {
     if (!name || !subject)
       return res.status(400).json({ error: "Missing fields" });
 
-    const entry = new Leaderboard({ name, subject, score, totalQuestions });
+    const entry = new Result({ name, subject, score, totalQuestions });
     await entry.save();
     res.json({ success: true, message: "Result stored" });
   } catch (err) {
-    console.error("❌ Save Result Error:", err.message);
+    console.error("Save Result Error:", err.message);
     res.status(500).json({ error: "Server error saving result" });
   }
 });
@@ -206,9 +180,10 @@ app.post("/api/saveResult", async (req, res) => {
 // -------------------- LEADERBOARD --------------------
 app.get("/api/leaderboard", async (req, res) => {
   try {
-    const results = await Leaderboard.find().sort({ score: -1 }).limit(10);
+    const results = await Result.find().sort({ score: -1, createdAt: 1 }).limit(10);
     res.json(results);
   } catch (err) {
+    console.error("Leaderboard Error:", err.message);
     res.status(500).json({ error: "Failed to fetch leaderboard" });
   }
 });
@@ -221,4 +196,5 @@ app.get("/:page", (req, res) => {
   });
 });
 
+// -------------------- START SERVER --------------------
 app.listen(PORT, () => console.log(`✅ Server running at http://localhost:${PORT}`));
