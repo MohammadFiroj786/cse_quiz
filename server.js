@@ -1,179 +1,257 @@
-// server.js
+// -------------------- IMPORTS --------------------
 import express from "express";
 import path from "path";
 import cors from "cors";
 import dotenv from "dotenv";
-import axios from "axios";
 import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import mongoose from "mongoose";
+import pkg from "pg";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
+const { Pool } = pkg;
 
+// -------------------- PATH SETUP --------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// -------------------- APP SETUP --------------------
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret";
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || "";
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
-// -------------------- Middleware --------------------
+// -------------------- DATABASE CONNECTION --------------------
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
+
+// Test DB connection
+pool.connect()
+  .then(() => console.log("✅ PostgreSQL Connected"))
+  .catch(err => console.error("❌ DB Connection Error:", err.message));
+
+// -------------------- GEMINI SETUP --------------------
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+// -------------------- MIDDLEWARE --------------------
+app.use(cors({
+  origin: process.env.FRONTEND_URL,
+  credentials: true
+}));
+
 app.use(express.json());
-
-// CORS for localhost + deployed frontend
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5500";
-app.use(
-  cors({
-    origin: [FRONTEND_URL],
-    methods: ["GET", "POST", "OPTIONS"],
-  })
-);
-
-// Serve static files
 app.use(express.static(path.join(__dirname, "public")));
 
-// -------------------- MongoDB Connection --------------------
-mongoose
-  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Error:", err.message));
+// -------------------- INIT DATABASE (Run Once) --------------------
+app.get("/init-db", async (req, res) => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        email VARCHAR(100) UNIQUE,
+        password TEXT
+      )
+    `);
 
-// -------------------- Schemas --------------------
-const userSchema = new mongoose.Schema({
-  name: String,
-  email: { type: String, unique: true, sparse: true },
-  password: String,
-  photoURL: String,
-  createdAt: { type: Date, default: Date.now },
-  googleId: String,
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS leaderboard (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        subject VARCHAR(100),
+        score INT,
+        totalquestions INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    res.send("Tables Created Successfully ✅");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error creating tables");
+  }
 });
 
-const leaderboardSchema = new mongoose.Schema({
-  name: String,
-  subject: String,
-  score: Number,
-  totalQuestions: Number,
-  createdAt: { type: Date, default: Date.now },
-});
-
-const User = mongoose.models.User || mongoose.model("User", userSchema);
-const Leaderboard = mongoose.models.Leaderboard || mongoose.model("Leaderboard", leaderboardSchema, "leaderboard");
-
-// -------------------- Signup --------------------
+// -------------------- SIGNUP --------------------
 app.post("/api/signup", async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
+
     if (!name || !email || !password || !confirmPassword)
-      return res.status(400).json({ error: "All fields are required" });
+      return res.status(400).json({ error: "All fields required" });
+
     if (password !== confirmPassword)
       return res.status(400).json({ error: "Passwords do not match" });
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ error: "Email already exists" });
+    const existingUser = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (existingUser.rows.length > 0)
+      return res.status(400).json({ error: "Email already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({ name, email, password: hashedPassword });
-    await newUser.save();
 
-    const token = jwt.sign({ email: newUser.email }, JWT_SECRET, { expiresIn: "2h" });
-    res.json({ message: "Signup successful", token, user: { name: newUser.name, email: newUser.email } });
+    await pool.query(
+      "INSERT INTO users (name, email, password) VALUES ($1,$2,$3)",
+      [name, email, hashedPassword]
+    );
+
+    const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "2h" });
+
+    res.json({ message: "Signup successful", token });
+
   } catch (error) {
-    console.error("Signup Error:", error.message);
-    res.status(500).json({ error: "Server error during signup" });
+    console.error(error);
+    res.status(500).json({ error: "Signup failed" });
   }
 });
 
-// -------------------- Login --------------------
+// -------------------- LOGIN --------------------
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: "User not found" });
+
+    const result = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (result.rows.length === 0)
+      return res.status(400).json({ error: "User not found" });
+
+    const user = result.rows[0];
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ error: "Invalid password" });
 
-    const token = jwt.sign({ email: user.email }, JWT_SECRET, { expiresIn: "2h" });
-    res.json({ message: "Login successful", token, user: { name: user.name, email: user.email, photoURL: user.photoURL || null } });
+    if (!isMatch)
+      return res.status(400).json({ error: "Invalid password" });
+
+    const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "2h" });
+
+    res.json({
+      message: "Login successful",
+      token,
+      user: {
+        name: user.name,
+        email: user.email,
+      },
+    });
+
   } catch (error) {
-    console.error("Login Error:", error.message);
-    res.status(500).json({ error: "Server error during login" });
+    console.error(error);
+    res.status(500).json({ error: "Login failed" });
   }
 });
 
-// -------------------- Quiz Generation --------------------
+// -------------------- GENERATE QUIZ --------------------
 app.post("/generate-quiz", async (req, res) => {
   try {
     const { subject, difficulty, limit } = req.body;
-    if (!subject || !difficulty || !limit) return res.status(400).json({ error: "Missing required fields" });
 
-    if (!PERPLEXITY_API_KEY) {
-      console.warn("⚠️ Using fallback questions (no API key)");
-      return res.json(generateFallbackQuestions(subject, difficulty, limit));
-    }
+    if (!subject || !difficulty || !limit)
+      return res.status(400).json({ error: "Missing fields" });
+
+    if (!GEMINI_API_KEY)
+      return res.status(500).json({ error: "Gemini key missing" });
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+    });
 
     const prompt = `
-Generate ${limit} ${difficulty}-level GATE MCQs on "${subject}".
-Return ONLY JSON array like:
-[{"question": "...", "options": ["A","B","C","D"], "answer": "A"}]
+Generate ${limit} ${difficulty} GATE MCQs on "${subject}".
+
+Return ONLY JSON array.
+
+Format:
+[
+  {
+    "question": "Question text",
+    "options": ["A", "B", "C", "D"],
+    "answer": "Correct option text"
+  }
+]
 `;
 
-    const response = await axios.post(
-      "https://api.perplexity.ai/chat/completions",
-      { model: "sonar", messages: [{ role: "user", content: prompt }] },
-      { headers: { Authorization: `Bearer ${PERPLEXITY_API_KEY}`, "Content-Type": "application/json" } }
-    );
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
-    const text = response.data?.choices?.[0]?.message?.content || "";
-    const cleaned = text.replace(/```(?:json)?/gi, "").replace(/`/g, "").trim();
-    const questions = JSON.parse(cleaned);
+    const cleaned = text
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+    const questions = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+
     res.json(questions);
+
   } catch (error) {
-    console.error("❌ Quiz Error:", error.message);
-    res.json(generateFallbackQuestions(req.body.subject, req.body.difficulty, req.body.limit));
+    console.error("Gemini Error:", error.message);
+    res.status(500).json({ error: "Quiz generation failed" });
   }
 });
 
-function generateFallbackQuestions(subject, difficulty, limit) {
-  const sample = [
-    { question: `Which data structure is LIFO? (${subject})`, options: ["Stack", "Queue", "Tree", "Heap"], answer: "Stack" },
-    { question: `Which sort uses divide & conquer? (${subject})`, options: ["Merge Sort", "Bubble Sort", "Quick Sort", "Insertion Sort"], answer: "Merge Sort" },
-  ];
-  return Array.from({ length: limit }, (_, i) => sample[i % sample.length]);
-}
-
-// -------------------- Leaderboard --------------------
+// -------------------- SAVE RESULT --------------------
 app.post("/api/saveResult", async (req, res) => {
   try {
     const { name, subject, score, totalQuestions } = req.body;
-    if (!name || !subject) return res.status(400).json({ error: "Missing fields" });
 
-    const entry = new Leaderboard({ name, subject, score, totalQuestions });
-    await entry.save();
-    res.json({ success: true, message: "Result stored" });
-  } catch (err) {
-    console.error("❌ Save Result Error:", err.message);
-    res.status(500).json({ error: "Server error saving result" });
+    await pool.query(
+      "INSERT INTO leaderboard (name, subject, score, totalquestions) VALUES ($1,$2,$3,$4)",
+      [name, subject, score, totalQuestions]
+    );
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Save failed" });
   }
 });
 
+// -------------------- LEADERBOARD --------------------
 app.get("/api/leaderboard", async (req, res) => {
   try {
-    const results = await Leaderboard.find().sort({ score: -1 }).limit(10);
-    res.json(results);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch leaderboard" });
+    const result = await pool.query(
+      "SELECT * FROM leaderboard ORDER BY score DESC LIMIT 10"
+    );
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Fetch failed" });
   }
 });
 
-// -------------------- Routes --------------------
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+// -------------------- STATIC ROUTES --------------------
+app.get("/", (req, res) =>
+  res.sendFile(path.join(__dirname, "public", "index.html"))
+);
+
 app.get("/:page", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", `${req.params.page}.html`), (err) => {
-    if (err) res.status(404).send("Not found");
-  });
+  res.sendFile(
+    path.join(__dirname, "public", `${req.params.page}.html`),
+    (err) => {
+      if (err) res.status(404).send("Not found");
+    }
+  );
 });
 
-// -------------------- Start Server --------------------
-app.listen(PORT, () => console.log(`✅ Server running at http://localhost:${PORT}`));
+// -------------------- GLOBAL ERROR HANDLER --------------------
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled Promise Rejection:", err);
+});
+
+// -------------------- START SERVER --------------------
+app.listen(PORT, () =>
+  console.log(`🚀 Server running on port ${PORT}`)
+);

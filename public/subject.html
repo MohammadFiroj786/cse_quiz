@@ -59,7 +59,6 @@
 
             <div class="mb-3">
               <label class="form-label fw-semibold">Number of Questions (5 - 10)</label>
-              <!-- Note: min 5, max 10 enforced in UI -->
               <input type="number" id="numQuestions" class="form-control" min="5" max="10" value="10" required>
             </div>
 
@@ -68,7 +67,6 @@
             </div>
           </form>
 
-          <!-- Loading Spinner -->
           <div id="loading" class="text-center mt-4" style="display:none;">
             <div class="spinner-border text-primary" role="status">
               <span class="visually-hidden">Loading...</span>
@@ -89,13 +87,25 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
-    // Load navbar (safe; run early)
+    // Set API URL dynamically
+    const API_URL = window.location.hostname === "localhost"
+      ? "http://localhost:5000"
+      : "https://gateprep-ai.onrender.com";
+
+    // Check if user is logged in using JWT in localStorage
+    const token = localStorage.getItem("token");
+    if (!token) {
+      // Redirect to login if no token
+      window.location.href = "login.html";
+    }
+
+    // Load navbar
     fetch('navbar.html')
       .then(res => res.text())
       .then(html => document.getElementById('navbar-placeholder').innerHTML = html)
       .catch(() => { /* ignore */ });
 
-    // Form handling
+    // Quiz setup form
     const form = document.getElementById('quizSetupForm');
     const loading = document.getElementById('loading');
 
@@ -106,37 +116,18 @@
       const difficulty = document.getElementById('difficulty').value.trim();
       let numQuestions = parseInt(document.getElementById('numQuestions').value, 10);
 
-      // Basic validation
       if (!subject) { alert('Please choose a subject'); return; }
       if (!difficulty) { alert('Please choose a difficulty'); return; }
 
-      // Clamp number of questions to allowed range 5..10
       if (isNaN(numQuestions) || numQuestions < 5) numQuestions = 5;
       if (numQuestions > 10) numQuestions = 10;
 
-      // show spinner then redirect
       loading.style.display = 'block';
       setTimeout(() => {
-        // encode params to be safe
         const url = `quiz.html?subject=${encodeURIComponent(subject)}&difficulty=${encodeURIComponent(difficulty)}&limit=${encodeURIComponent(numQuestions)}`;
         window.location.href = url;
       }, 700);
     });
   </script>
-  <script type="module">
-import { auth } from './firebase-config.js';
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.15.0/firebase-auth.js";
-
-// Hide content until user is verified
-document.querySelector('.container').style.display = 'none';
-
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.href = 'login.html';
-  } else {
-    document.querySelector('.container').style.display = 'block';
-  }
-});
-</script>
 </body>
 </html>
