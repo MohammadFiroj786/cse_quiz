@@ -24,9 +24,9 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 // -------------------- DATABASE CONNECTION --------------------
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 // Test DB connection
