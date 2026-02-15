@@ -47,36 +47,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// -------------------- INIT DATABASE (Run Once) --------------------
-app.get("/init-db", async (req, res) => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100),
-        email VARCHAR(100) UNIQUE,
-        password TEXT
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS leaderboard (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100),
-        subject VARCHAR(100),
-        score INT,
-        totalquestions INT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    res.send("Tables Created Successfully ✅");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error creating tables");
-  }
-});
-
 // -------------------- SIGNUP --------------------
 app.post("/api/signup", async (req, res) => {
   try {
