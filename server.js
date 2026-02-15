@@ -48,7 +48,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // -------------------- SIGNUP --------------------
-app.post("/api/signup", async (req, res) => {
+app.post("/:page", async (req, res) => {
   try {
     const { name, email, password, confirmPassword } = req.body;
 
